@@ -6,6 +6,8 @@ import registerRoutes from "./routes/register.js";
 import authRoutes from "./routes/authRoutes.js";
 import enrollmentRoutes from "./routes/enrollmentRoutes.js";
 import courseRoutes from "./routes/courseRoutes.js";
+import instructorRoutes from "./routes/instructorRoutes.js";
+
 import courseFilterRoutes from "./routes/courseFilterRoutes.js";
 dotenv.config();
 connectDB();
@@ -20,6 +22,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/register", registerRoutes);
 app.use("/api/course", courseRoutes);
 app.use("/api/courses", courseFilterRoutes);
+app.use("/api/instructors", instructorRoutes);
 
 app.use("/api", enrollmentRoutes);
 const PORT = 5000;
