@@ -6,24 +6,42 @@ const router = express.Router();
 
 // POST /api/register
 router.post("/", async (req, res) => {
-  const { name, email, phone, profession,demo } = req.body;
+  console.log("📩 Incoming registration request:", req.body);
 
-  if (!name || !email || !phone || !profession || !req.body.demo) {
+  const { name, email, phone, profession, demo } = req.body;
+
+  // Validate input
+  if (!name || !email || !phone || !profession || !demo) {
+    console.log("❌ Registration failed: Missing fields");
     return res.status(400).json({ message: "All fields are required" });
   }
 
   try {
-    // Check if user already exists
+    // Check user exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
+      console.log("⚠️ Email already registered:", email);
       return res.status(400).json({ message: "Email already registered" });
     }
 
-    // Create new user
-    const user = new User({ name, email, phone, profession, CourseDemo: demo });
-    await user.save();
+    // Save user
+    const user = new User({
+      name,
+      email,
+      phone,
+      profession,
+      CourseDemo: demo,
+    });
 
-    // Send confirmation email
+    const savedUser = await user.save();
+    console.log("✅ User saved successfully:", savedUser._id);
+
+    // FAST response to frontend
+    res.status(201).json({
+      message: "Successfully registered! Confirmation email will be sent shortly.",
+    });
+
+    // Email send (non-blocking)
     const emailContent = `
       <h2>Welcome to Poizdedge Institute, ${name}!</h2>
       <p>You have successfully registered for the <b>Free Demo</b>.</p>
@@ -31,11 +49,12 @@ router.post("/", async (req, res) => {
       <p>Regards,<br/>Poizdedge Institute</p>
     `;
 
-    await sendEmail(email, "Registration Successful - Free Demo", emailContent);
+    sendEmail(email, "Registration Successful - Free Demo", emailContent)
+      .then(() => console.log("📨 Email sent in background"))
+      .catch((err) => console.error("❌ Email failed in background:", err));
 
-    res.status(201).json({ message: "Successfully registered! Confirmation email sent." });
   } catch (error) {
-    console.error(error);
+    console.error("❌ Server Error during registration:", error);
     res.status(500).json({ message: "Server Error" });
   }
 });
