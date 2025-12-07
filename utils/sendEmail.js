@@ -3,9 +3,8 @@ import nodemailer from "nodemailer";
 export const sendEmail = async (to, subject, html) => {
   console.log("📤 Attempting to send email to:", to);
 
-  // Validate ENV
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    console.error("❌ SMTP CREDENTIALS MISSING in environment variables");
+    console.error("❌ SMTP credentials missing in environment variables");
     throw new Error("SMTP configuration missing");
   }
 
@@ -18,8 +17,8 @@ export const sendEmail = async (to, subject, html) => {
       pass: process.env.SMTP_PASS,
     },
     tls: {
-      rejectUnauthorized: false, // Required on Render for Gmail
-    }
+      rejectUnauthorized: false, // Render-specific TLS fix
+    },
   });
 
   try {
@@ -32,7 +31,6 @@ export const sendEmail = async (to, subject, html) => {
 
     console.log("✅ Email sent successfully:", info.messageId);
     return info;
-
   } catch (err) {
     console.error("❌ Email sending error details:");
     console.error("→ Message:", err.message);
