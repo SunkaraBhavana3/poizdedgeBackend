@@ -16,14 +16,15 @@ router.post("/", async (req, res) => {
   }
 
   try {
-    // Check if the same user already registered for the same demo
+    // Allow same email for different demos, block only if duplicate demo
     const existingUser = await User.findOne({ email, CourseDemo: demo });
     if (existingUser) {
       console.log("⚠️ User already registered for this demo:", email, demo);
-      return res.status(400).json({ message: "You have already registered for this demo." });
+      return res
+        .status(400)
+        .json({ message: "You have already registered for this demo." });
     }
 
-    // Save new registration
     const user = new User({
       name,
       email,
@@ -35,12 +36,12 @@ router.post("/", async (req, res) => {
     const savedUser = await user.save();
     console.log("✅ User saved successfully:", savedUser._id);
 
-    // Fast response
+    // Respond quickly
     res.status(201).json({
       message: "Successfully registered! Confirmation email will be sent shortly.",
     });
 
-    // Send confirmation email asynchronously
+    // Send email asynchronously
     const emailContent = `
       <h2>Welcome to Poizdedge Institute, ${name}!</h2>
       <p>You have successfully registered for the <b>${demo}</b> demo.</p>
@@ -51,7 +52,6 @@ router.post("/", async (req, res) => {
     sendEmail(email, `Registration Successful - ${demo} Demo`, emailContent)
       .then(() => console.log("📨 Email sent in background"))
       .catch((err) => console.error("❌ Email failed in background:", err));
-
   } catch (error) {
     console.error("❌ Server Error during registration:", error);
     res.status(500).json({ message: "Server Error" });
