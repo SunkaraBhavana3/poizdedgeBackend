@@ -10,21 +10,20 @@ router.post("/", async (req, res) => {
 
   const { name, email, phone, profession, demo } = req.body;
 
-  // Validate input
   if (!name || !email || !phone || !profession || !demo) {
     console.log("❌ Registration failed: Missing fields");
     return res.status(400).json({ message: "All fields are required" });
   }
 
   try {
-    // Check user exists
-    const existingUser = await User.findOne({ email });
+    // Check if the same user already registered for the same demo
+    const existingUser = await User.findOne({ email, CourseDemo: demo });
     if (existingUser) {
-      console.log("⚠️ Email already registered:", email);
-      return res.status(400).json({ message: "Email already registered" });
+      console.log("⚠️ User already registered for this demo:", email, demo);
+      return res.status(400).json({ message: "You have already registered for this demo." });
     }
 
-    // Save user
+    // Save new registration
     const user = new User({
       name,
       email,
@@ -36,20 +35,20 @@ router.post("/", async (req, res) => {
     const savedUser = await user.save();
     console.log("✅ User saved successfully:", savedUser._id);
 
-    // FAST response to frontend
+    // Fast response
     res.status(201).json({
       message: "Successfully registered! Confirmation email will be sent shortly.",
     });
 
-    // Email send (non-blocking)
+    // Send confirmation email asynchronously
     const emailContent = `
       <h2>Welcome to Poizdedge Institute, ${name}!</h2>
-      <p>You have successfully registered for the <b>Free Demo</b>.</p>
+      <p>You have successfully registered for the <b>${demo}</b> demo.</p>
       <p>We are excited to have you on board!</p>
       <p>Regards,<br/>Poizdedge Institute</p>
     `;
 
-    sendEmail(email, "Registration Successful - Free Demo", emailContent)
+    sendEmail(email, `Registration Successful - ${demo} Demo`, emailContent)
       .then(() => console.log("📨 Email sent in background"))
       .catch((err) => console.error("❌ Email failed in background:", err));
 
