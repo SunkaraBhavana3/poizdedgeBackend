@@ -1,3 +1,4 @@
+// src/routes/auth.js
 import express from "express";
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
@@ -7,34 +8,40 @@ import nodemailer from "nodemailer";
 
 const router = express.Router();
 
-/* --------------------------------
-   SMTP TRANSPORTER (WITH LOGS)
----------------------------------*/
-const createTransporter = async () => {
-  console.log("📧 SMTP USER:", process.env.SMTP_USER);
+/* ----------------------------------------------
+   VERIFY TOKEN (Middleware)
+------------------------------------------------*/
+export const verifyToken = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ message: "No token provided ❌" });
 
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    logger: true,
-    debug: true,
-  });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select("-password");
 
-  await transporter.verify();
-  console.log("✅ SMTP VERIFIED");
+    if (!user) return res.status(401).json({ message: "User not found ❌" });
 
-  return transporter;
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error("verifyToken error:", error);
+    return res.status(401).json({ message: "Invalid token ❌" });
+  }
 };
 
-/* --------------------------------
-   REGISTER + WELCOME EMAIL
----------------------------------*/
-router.post("/register", async (req, res) => {
-  console.log("➡️ /register HIT");
+/* ----------------------------------------------
+   VERIFY ADMIN
+------------------------------------------------*/
+export const verifyAdmin = (req, res, next) => {
+  if (!req.user || !req.user.isAdmin)
+    return res.status(403).json({ message: "Admin access only ❌" });
+  next();
+};
 
+/* ----------------------------------------------
+   REGISTER USER
+------------------------------------------------*/
+router.post("/register", async (req, res) => {
   try {
     const {
       firstName,
@@ -46,109 +53,157 @@ router.post("/register", async (req, res) => {
       password,
     } = req.body;
 
-    if (await User.findOne({ email }))
+    const existingUser = await User.findOne({ email });
+    if (existingUser)
       return res.status(400).json({ message: "Email already exists ❌" });
 
-    const hashed = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = await User.create({
+    const newUser = await User.create({
       firstName,
       lastName,
       email,
       phone: phoneNumber,
       course: courseOfInterest,
       qualification: highestQualification,
-      password: hashed,
+      password: hashedPassword,
       isAdmin: email === "bhavanasunkara5@gmail.com",
     });
 
-    console.log("✅ USER SAVED");
-
-    /* -------- SEND EMAIL -------- */
-    try {
-      const transporter = await createTransporter();
-
-      const info = await transporter.sendMail({
-        from: `"PoizdEdge Institute" <${process.env.SMTP_USER}>`,
-        to: user.email,
-        subject: "Welcome to PoizdEdge Institute 🎓",
-        html: `
-          <h2>Welcome ${user.firstName}!</h2>
-          <p>Your registration is successful.</p>
-          <p><strong>Course:</strong> ${user.course}</p>
-        `,
-      });
-
-      console.log("📨 EMAIL SENT:", info.messageId);
-    } catch (mailErr) {
-      console.error("❌ EMAIL FAILED:", mailErr.message);
-    }
-
     res.status(201).json({
       message: "Registration Successful ✅",
-      user,
+      user: newUser,
     });
-  } catch (err) {
-    console.error("REGISTER ERROR:", err);
-    res.status(500).json({ message: err.message });
+  } catch (error) {
+    console.error("Register error:", error);
+    res.status(500).json({ message: "Server Error", error: error.message });
   }
 });
 
-/* --------------------------------
-   LOGIN
----------------------------------*/
+/* ----------------------------------------------
+   LOGIN USER
+------------------------------------------------*/
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: "Invalid email ❌" });
+    if (!user)
+      return res.status(400).json({ message: "Invalid Email ❌" });
 
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(400).json({ message: "Wrong password ❌" });
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch)
+      return res.status(400).json({ message: "Incorrect Password ❌" });
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
 
-    res.json({ message: "Login successful ✅", token, user });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.json({ message: "Login Successful ✅", token, user });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ message: "Server Error", error: error.message });
   }
 });
 
-/* --------------------------------
-   FORGOT PASSWORD
----------------------------------*/
+/* ----------------------------------------------
+   FORGOT PASSWORD — send token to email
+------------------------------------------------*/
 router.post("/forgot-password", async (req, res) => {
-  console.log("➡️ /forgot-password HIT");
-
   try {
     const { email } = req.body;
+
+    if (!email)
+      return res.status(400).json({ message: "Email is required ❌" });
+
     const user = await User.findOne({ email });
     if (!user)
-      return res.status(404).json({ message: "User not found ❌" });
+      return res.status(404).json({ message: "No user found ❌" });
 
-    const token = crypto.randomBytes(32).toString("hex");
+    const resetToken = crypto.randomBytes(32).toString("hex");
 
-    user.resetPasswordToken = token;
-    user.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; // 15 min
     await user.save();
 
-    const transporter = await createTransporter();
-
-    await transporter.sendMail({
-      from: `"PoizdEdge Institute" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: "Password Reset Token",
-      html: `<h2>Your Token</h2><h3>${token}</h3>`,
+    // Gmail SMTP
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS, // MUST be an App Password ❗
+      },
     });
 
-    res.json({ message: "Reset token sent ✅" });
+    const mailOptions = {
+      from: `PoizdEdge Institute <${process.env.SMTP_USER}>`,
+      to: user.email,
+      subject: "Your Password Reset Token",
+      html: `
+        <h2>Password Reset Request</h2>
+        <p>Hello ${user.firstName},</p>
+        <p>Use the token below to reset your password:</p>
+
+        <h3 style="color:#1E3A8A">${resetToken}</h3>
+
+        <p>This token is valid for <strong>15 minutes</strong>.</p>
+        <p>Enter this token in the password reset form.</p>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).json({ message: "Reset token sent to email 💙" });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: err.message });
+    console.error("Forgot password error:", err);
+    res.status(500).json({
+      message: "Error sending reset token ❌",
+      error: err.message,
+    });
   }
+});
+
+/* ----------------------------------------------
+   RESET PASSWORD — frontend sends token + new password
+------------------------------------------------*/
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password)
+      return res.status(400).json({ message: "Token & password required ❌" });
+
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    if (!user)
+      return res.status(400).json({
+        message: "Invalid or expired token ❌",
+      });
+
+    user.password = await bcrypt.hash(password, 10);
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+
+    await user.save();
+
+    res.json({ message: "Password reset successful 💙" });
+  } catch (err) {
+    console.error("Reset password error:", err);
+    res.status(500).json({
+      message: "Server error ❌",
+      error: err.message,
+    });
+  }
+});
+
+/* ----------------------------------------------
+   GET USER DETAILS
+------------------------------------------------*/
+router.get("/me", verifyToken, async (req, res) => {
+  res.json({ message: "User fetched", user: req.user });
 });
 
 export default router;
