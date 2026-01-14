@@ -10,6 +10,7 @@ import courseRoutes from "./routes/courseRoutes.js";
 import instructorRoutes from "./routes/instructorRoutes.js";
 import statsRoutes from "./routes/statsRoutes.js";
 import Course from "./routes/courseRoutes.js";
+import StudentLead from "./routes/studentLeadRoutes.js";
 import courseFilterRoutes from "./routes/courseFilterRoutes.js";
 dotenv.config();
 connectDB();
@@ -27,6 +28,8 @@ app.use("/api/contact", contactRoutes);
 app.use("/api/course", courseRoutes);
 app.use("/api/courses", courseFilterRoutes);
 app.use("/api/instructors", instructorRoutes);
+app.use("/api/studentlead", StudentLead);
+
 app.use("/api/stats", statsRoutes);
 const BrochureSchema = new mongoose.Schema({
   email: { type: String, unique: true },
