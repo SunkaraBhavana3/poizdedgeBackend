@@ -12,6 +12,9 @@ import statsRoutes from "./routes/statsRoutes.js";
 import Course from "./routes/courseRoutes.js";
 import StudentLead from "./routes/studentLeadRoutes.js";
 import courseFilterRoutes from "./routes/courseFilterRoutes.js";
+import demo from "./routes/demoCourseRoutes.js";
+
+
 dotenv.config();
 connectDB();
 import contactRoutes from "./routes/contactRoutes.js";
@@ -24,12 +27,11 @@ app.use(cors());
 app.use("/api/auth", authRoutes);
 app.use("/api/register", registerRoutes);
 app.use("/api/contact", contactRoutes);
-
+app.use("/api/demo", demo);
 app.use("/api/course", courseRoutes);
 app.use("/api/courses", courseFilterRoutes);
 app.use("/api/instructors", instructorRoutes);
 app.use("/api/studentlead", StudentLead);
-
 app.use("/api/stats", statsRoutes);
 const BrochureSchema = new mongoose.Schema({
   email: { type: String, unique: true },
@@ -60,3 +62,4 @@ const PORT = 5000;
 app.listen(process.env.PORT, () =>
   console.log(`🚀 Server running on port ${process.env.PORT}`)
 );
+
