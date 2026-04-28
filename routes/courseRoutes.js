@@ -26,7 +26,7 @@ router.post("/add", async (req, res) => {
     res.json({ message: "Course created successfully", course });
   } catch (error) {
     console.log("Add Course Error:", error);
-    res.status(500).json({ message: "Failed to create course", error });
+    res.status(500).json({ message: "Failed to create course", error: error.message });
   }
 });
 
@@ -38,7 +38,7 @@ router.get("/", async (req, res) => {
     const courses = await Course.find();
     res.json(courses);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch courses", error });
+    res.status(500).json({ message: "Failed to fetch courses", error: error.message });
   }
 });
 
@@ -51,7 +51,7 @@ router.get("/:courseId", async (req, res) => {
     if (!course) return res.status(404).json({ message: "Course not found" });
     res.json(course);
   } catch (error) {
-    res.status(500).json({ message: "Error fetching course", error });
+    res.status(500).json({ message: "Error fetching course", error: error.message });
   }
 });
 
@@ -64,7 +64,7 @@ router.put("/:courseId", async (req, res) => {
     if (!updated) return res.status(404).json({ message: "Course not found" });
     res.json({ message: "Course updated", course: updated });
   } catch (error) {
-    res.status(500).json({ message: "Failed to update course", error });
+    res.status(500).json({ message: "Failed to update course", error: error.message });
   }
 });
 
@@ -77,7 +77,7 @@ router.delete("/:courseId", async (req, res) => {
     if (!deleted) return res.status(404).json({ message: "Course not found" });
     res.json({ message: "Course deleted", course: deleted });
   } catch (error) {
-    res.status(500).json({ message: "Failed to delete course", error });
+    res.status(500).json({ message: "Failed to delete course", error: error.message });
   }
 });
 
@@ -98,17 +98,20 @@ router.post("/:courseId/module/add", async (req, res) => {
     res.json({ message: "Module added", course: updated });
   } catch (error) {
     console.log("Add Module Error:", error);
-    res.status(500).json({ message: "Failed to add module", error });
+    res.status(500).json({ message: "Failed to add module", error: error.message });
   }
 });
 
+/* ============================================================
+   7. Add Topic to Module
+============================================================ */
 router.post("/:courseId/module/:moduleId/topic/add", async (req, res) => {
   try {
-    const { topicName, video, material } = req.body;
+    const { topicName, video, materials } = req.body; // Fixed: materials (plural)
 
     const updated = await Course.findOneAndUpdate(
       { courseId: req.params.courseId, "modules.moduleId": req.params.moduleId },
-      { $push: { "modules.$.topics": { topicName, video, material } } },
+      { $push: { "modules.$.topics": { topicName, video, materials } } },
       { new: true, runValidators: true }
     );
 
@@ -116,7 +119,7 @@ router.post("/:courseId/module/:moduleId/topic/add", async (req, res) => {
     res.json({ message: "Topic added", course: updated });
   } catch (error) {
     console.log("Add Topic Error:", error);
-    res.status(500).json({ message: "Failed to add topic", error });
+    res.status(500).json({ message: "Failed to add topic", error: error.message });
   }
 });
 
@@ -137,44 +140,176 @@ router.post("/:courseId/module/:moduleId/quiz/add", async (req, res) => {
     res.json({ message: "Quiz added", course: updated });
   } catch (error) {
     console.log("Add Quiz Error:", error);
-    res.status(500).json({ message: "Failed to add quiz", error });
+    res.status(500).json({ message: "Failed to add quiz", error: error.message });
   }
 });
 
-/* ============================================================
-   9. Update Module
+ /* ============================================================
+   9. Update Module (FIXED)
 ============================================================ */
 router.put("/:courseId/module/:moduleId", async (req, res) => {
   try {
-    const course = await Course.findOne({ courseId: req.params.courseId });
-    if (!course) return res.status(404).json({ message: "Course not found" });
+    const { moduleTitle, moduleDescription } = req.body;
 
-    const module = course.modules.id(req.params.moduleId);
-    if (!module) return res.status(404).json({ message: "Module not found" });
+    const updated = await Course.findOneAndUpdate(
+      {
+        courseId: req.params.courseId,
+        "modules.moduleId": req.params.moduleId
+      },
+      {
+        $set: {
+          "modules.$.moduleTitle": moduleTitle,
+          "modules.$.moduleDescription": moduleDescription
+        }
+      },
+      {
+        new: true,
+        runValidators: true
+      }
+    );
 
-    Object.assign(module, req.body);
-    await course.save();
+    if (!updated) {
+      return res.status(404).json({
+        message: "Course or Module not found"
+      });
+    }
 
-    res.json({ message: "Module updated", course });
+    res.json({
+      message: "Module updated successfully",
+      course: updated
+    });
+
   } catch (error) {
-    res.status(500).json({ message: "Failed to update module", error });
+    console.log("Update Module Error:", error);
+    res.status(500).json({
+      message: "Failed to update module",
+      error: error.message
+    });
+  }
+});
+
+
+/* ============================================================
+   10. Delete Module (IMPROVED)
+============================================================ */
+router.delete("/:courseId/module/:moduleId", async (req, res) => {
+  try {
+    const updated = await Course.findOneAndUpdate(
+      {
+        courseId: req.params.courseId,
+        "modules.moduleId": req.params.moduleId
+      },
+      {
+        $pull: {
+          modules: {
+            moduleId: req.params.moduleId
+          }
+        }
+      },
+      {
+        new: true
+      }
+    );
+
+    if (!updated) {
+      return res.status(404).json({
+        message: "Course or Module not found"
+      });
+    }
+
+    res.json({
+      message: "Module deleted successfully",
+      course: updated
+    });
+
+  } catch (error) {
+    console.log("Delete Module Error:", error);
+    res.status(500).json({
+      message: "Failed to delete module",
+      error: error.message
+    });
   }
 });
 
 /* ============================================================
-   10. Delete Module
+   11. Update Topic in Module
 ============================================================ */
-router.delete("/:courseId/module/:moduleId", async (req, res) => {
+router.put("/:courseId/module/:moduleId/topic/:topicId", async (req, res) => {
   try {
-    const course = await Course.findOne({ courseId: req.params.courseId });
-    if (!course) return res.status(404).json({ message: "Course not found" });
+    const updated = await Course.findOneAndUpdate(
+      { courseId: req.params.courseId, "modules.moduleId": req.params.moduleId },
+      { $set: { "modules.$.topics.$[topic]": req.body } },
+      { arrayFilters: [{ "topic.topicId": req.params.topicId }], new: true, runValidators: true }
+    );
 
-    course.modules = course.modules.filter((m) => m._id.toString() !== req.params.moduleId);
-    await course.save();
-
-    res.json({ message: "Module deleted", course });
+    if (!updated) return res.status(404).json({ message: "Course, Module, or Topic not found" });
+    res.json({ message: "Topic updated", course: updated });
   } catch (error) {
-    res.status(500).json({ message: "Failed to delete module", error });
+    console.log("Update Topic Error:", error);
+    res.status(500).json({ message: "Failed to update topic", error: error.message });
+  }
+});
+
+/* ============================================================
+   12. Delete Topic from Module
+============================================================ */
+router.delete("/:courseId/module/:moduleId/topic/:topicId", async (req, res) => {
+  try {
+    const updated = await Course.findOneAndUpdate(
+      { courseId: req.params.courseId, "modules.moduleId": req.params.moduleId },
+      { $pull: { "modules.$.topics": { topicId: req.params.topicId } } },
+      { new: true }
+    );
+
+    if (!updated) return res.status(404).json({ message: "Course, Module, or Topic not found" });
+    res.json({ message: "Topic deleted", course: updated });
+  } catch (error) {
+    console.log("Delete Topic Error:", error);
+    res.status(500).json({ message: "Failed to delete topic", error: error.message });
+  }
+});
+
+/* ============================================================
+   13. Update Quiz in Module
+============================================================ */
+router.put("/:courseId/module/:moduleId/quiz/:quizId", async (req, res) => {
+  try {
+    // Note: quizSchema doesn't have a quizId field; using _id (ObjectId) for quiz items
+    const quizId = req.params.quizId; // Assume this is the _id string
+
+    const updated = await Course.findOneAndUpdate(
+      { courseId: req.params.courseId, "modules.moduleId": req.params.moduleId },
+      { $set: { "modules.$.quiz.$[quiz]": req.body } },
+      { arrayFilters: [{ "quiz._id": quizId }], new: true, runValidators: true }
+    );
+
+    if (!updated) return res.status(404).json({ message: "Course, Module, or Quiz not found" });
+    res.json({ message: "Quiz updated", course: updated });
+  } catch (error) {
+    console.log("Update Quiz Error:", error);
+    res.status(500).json({ message: "Failed to update quiz", error: error.message });
+  }
+});
+
+/* ============================================================
+   14. Delete Quiz from Module
+============================================================ */
+router.delete("/:courseId/module/:moduleId/quiz/:quizId", async (req, res) => {
+  try {
+    // Note: using _id for quiz items
+    const quizId = req.params.quizId; // Assume this is the _id string
+
+    const updated = await Course.findOneAndUpdate(
+      { courseId: req.params.courseId, "modules.moduleId": req.params.moduleId },
+      { $pull: { "modules.$.quiz": { _id: quizId } } },
+      { new: true }
+    );
+
+    if (!updated) return res.status(404).json({ message: "Course, Module, or Quiz not found" });
+    res.json({ message: "Quiz deleted", course: updated });
+  } catch (error) {
+    console.log("Delete Quiz Error:", error);
+    res.status(500).json({ message: "Failed to delete quiz", error: error.message });
   }
 });
 
